@@ -13,6 +13,7 @@ export const newStorage = (mmkv: MMKV) => ({
     mmkv.delete(key);
     return Promise.resolve();
   },
+  getInstance: () => mmkv,
 });
 
 // Initialize MMKV

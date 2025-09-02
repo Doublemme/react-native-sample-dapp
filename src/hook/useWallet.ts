@@ -3,12 +3,13 @@ import nacl from "tweetnacl";
 import { storage } from "../utils/storage";
 import { decodeBase64, encodeBase64 } from "tweetnacl-util";
 import { Linking } from "react-native";
+import { useMMKVString } from "react-native-mmkv";
 
 export const useWallet = () => {
   // const keyPair = storage.getString("user.keyPair");
+  const [keyPair] = useMMKVString("user.keyPair", storage.getInstance());
 
   const generateKeyPair = useCallback(async () => {
-    const keyPair = await storage.getItem("user.keyPair");
     if (keyPair) {
       const keyPairObject = JSON.parse(keyPair);
       return nacl.box.keyPair.fromSecretKey(
@@ -30,6 +31,43 @@ export const useWallet = () => {
 
     return newKeyPair;
   }, []);
+
+  const decryptPayload = useCallback(
+    <T>(publicKey: string, data: string, nonce: string) => {
+      if (!keyPair) {
+        return;
+      }
+
+      const keyPairObject: KeyPair = JSON.parse(keyPair);
+
+      try {
+        const naclKeyPair = nacl.box.keyPair.fromSecretKey(
+          decodeBase64(keyPairObject.privateKey)
+        );
+
+        const decryptedData = nacl.box.open(
+          decodeBase64(data),
+          decodeBase64(nonce),
+          decodeBase64(publicKey),
+          naclKeyPair.secretKey
+        );
+
+        if (!decryptedData) {
+          return "Decryption failed: Invalid data or keys";
+        }
+
+        // Convert decrypted Uint8Array to string
+        const decryptedDataString = new TextDecoder().decode(decryptedData);
+
+        return JSON.parse(decryptedDataString) satisfies T;
+      } catch (error) {
+        console.log("----- Error decrypting payload -----");
+        console.log(error);
+        return;
+      }
+    },
+    []
+  );
 
   const onConnect = useCallback(async () => {
     console.log("----- Generating key pair -----");
@@ -53,5 +91,6 @@ export const useWallet = () => {
   return {
     onConnect,
     generateKeyPair,
+    decryptPayload,
   };
 };
