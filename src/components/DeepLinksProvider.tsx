@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Linking } from "react-native";
 import { useWallet } from "../hook";
+import { storage } from "../utils";
 
 type DeepLinksProviderProps = {
   children: React.ReactNode;
@@ -34,7 +35,12 @@ export const DeepLinksProvider = ({ children }: DeepLinksProviderProps) => {
               data,
               nonce
             );
-            console.log(decryptedData);
+
+            if (!("errorCode" in decryptedData)) {
+              storage.setItem("user.session", decryptedData.session);
+              storage.setItem("user.address", decryptedData.address);
+              storage.setItem("user.veworldPublicKey", publicKey);
+            }
           }
           break;
         default:

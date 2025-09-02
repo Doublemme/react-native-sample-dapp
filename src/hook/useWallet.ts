@@ -4,10 +4,23 @@ import { storage } from "../utils/storage";
 import { decodeBase64, encodeBase64 } from "tweetnacl-util";
 import { Linking } from "react-native";
 import { useMMKVString } from "react-native-mmkv";
+import { TransactionClause } from "@vechain/sdk-core";
 
 export const useWallet = () => {
   // const keyPair = storage.getString("user.keyPair");
-  const [keyPair] = useMMKVString("user.keyPair", storage.getInstance());
+  const [keyPair] = useMMKVString("user.keyPair", storage.instance);
+  const [session] = useMMKVString("user.session", storage.instance);
+
+  const getKeyPair = useCallback(async () => {
+    if (keyPair) {
+      const keyPairObject = JSON.parse(keyPair);
+      return nacl.box.keyPair.fromSecretKey(
+        decodeBase64(keyPairObject.privateKey)
+      );
+    }
+
+    return null;
+  }, []);
 
   const generateKeyPair = useCallback(async () => {
     if (keyPair) {
@@ -33,9 +46,16 @@ export const useWallet = () => {
   }, []);
 
   const decryptPayload = useCallback(
-    <T>(publicKey: string, data: string, nonce: string) => {
+    <T, ET = OnVeWorldError>(
+      publicKey: string,
+      data: string,
+      nonce: string
+    ) => {
       if (!keyPair) {
-        return;
+        return {
+          errorCode: "-32603",
+          errorMessage: "Key pair not found",
+        } as ET;
       }
 
       const keyPairObject: KeyPair = JSON.parse(keyPair);
@@ -53,17 +73,23 @@ export const useWallet = () => {
         );
 
         if (!decryptedData) {
-          return "Decryption failed: Invalid data or keys";
+          return {
+            errorCode: "-32603",
+            errorMessage: "Decryption failed: Invalid data or keys",
+          } as ET;
         }
 
         // Convert decrypted Uint8Array to string
         const decryptedDataString = new TextDecoder().decode(decryptedData);
 
-        return JSON.parse(decryptedDataString) satisfies T;
+        return JSON.parse(decryptedDataString) as T;
       } catch (error) {
         console.log("----- Error decrypting payload -----");
-        console.log(error);
-        return;
+        const err = error as Error;
+        return {
+          errorCode: "-32603",
+          errorMessage: err.message,
+        } as ET;
       }
     },
     []
@@ -88,9 +114,80 @@ export const useWallet = () => {
     Linking.openURL(url);
   }, []);
 
+  const onSignTransaction = useCallback(
+    async <ET = OnVeWorldError>(clauses: TransactionClause[]) => {
+      if (!session) {
+        return {
+          errorCode: "-32603",
+          errorMessage: "Session not found",
+        } as ET;
+      }
+
+      const keyPair = await getKeyPair();
+      if (!keyPair) {
+        return {
+          errorCode: "-32603",
+          errorMessage: "Key pair not found",
+        } as ET;
+      }
+
+      const payload = {
+        transaction: {
+          method: "thor_signTransaction",
+          message: clauses,
+          options: {},
+        },
+        session: session,
+      };
+
+      const nonce = nacl.randomBytes(24);
+
+      const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
+
+      const veWorldPublicKey = await storage.getItem("user.veworldPublicKey");
+
+      if (!veWorldPublicKey) {
+        return {
+          errorCode: "-32603",
+          errorMessage: "VeWorld public key not found",
+        } as ET;
+      }
+
+      const encryptedPayload = nacl.box(
+        payloadBytes,
+        nonce,
+        decodeBase64(veWorldPublicKey),
+        keyPair.secretKey
+      );
+
+      const veWorldReq = {
+        type: "external-app",
+        appName: "My DApp",
+        appUrl: "https://mydapp.com",
+        icon: window.location.origin + "/src/assets/fiorino.jpeg",
+        description: "Sign and send a transaction with VeWorld",
+        publicKey: encodeBase64(keyPair.publicKey),
+        nonce: encodeBase64(nonce),
+        redirectUrl: "mydapp://",
+        payload: encodeBase64(encryptedPayload),
+      };
+
+      const requestBytes = encodeBase64(
+        new TextEncoder().encode(JSON.stringify(veWorldReq))
+      );
+
+      const url =
+        "https://veworld.com/api/v1/signTransaction?request=" +
+        requestBytes.toString();
+      Linking.openURL(url);
+    },
+    []
+  );
+
   return {
     onConnect,
     generateKeyPair,
     decryptPayload,
+    onSignTransaction,
   };
 };

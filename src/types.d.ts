@@ -20,11 +20,17 @@ type OnVeWorldConnectedResponse = {
 };
 
 type OnVeWorldConnectedData = {
+  publicKey: string;
   address: string;
   session: string;
 };
 
-type OnVeWorldConnectedError = {
+type OnVeWorldError = {
+  errorCode: string;
+  errorMessage: string;
+};
+
+type ErrorResponse = {
   error_code: string;
   error_message: string;
 };
