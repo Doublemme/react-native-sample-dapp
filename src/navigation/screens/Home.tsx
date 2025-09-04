@@ -7,7 +7,7 @@ import { useMMKVString } from "react-native-mmkv";
 import { sendVETClauses } from "../../utils/demoClauses";
 
 export function Home() {
-  const { onConnect, onSignTransaction } = useWallet();
+  const { onConnect, onSignTransaction, onDisconnect } = useWallet();
   const [session] = useMMKVString("user.session", storage.instance);
   const [address] = useMMKVString("user.address", storage.instance);
   const [veworldPublicKey] = useMMKVString(
@@ -49,7 +49,7 @@ export function Home() {
         />
         <Button title="Sign Certificate" onPress={() => {}} />
         <Button title="Sign Typed Data" onPress={() => {}} />
-        <Button title="Disconnect Wallet" onPress={() => {}} />
+        <Button title="Disconnect Wallet" onPress={onDisconnect} />
         <Button
           title="Clear Storage"
           onPress={() => {
